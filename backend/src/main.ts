@@ -7,7 +7,7 @@ async function bootstrap() {
   app.enableCors({
     origin: [
       /\.cloudrun\.app$/,
-      'https://your-frontend.vercel.app',
+      'https://techscope-ai.vercel.app',
       'http://localhost:3000',
     ],
     credentials: true,
