@@ -1,39 +1,31 @@
+import { createMiddlewareClient } from "@supabase/auth-helpers-nextjs";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 export async function middleware(req: NextRequest) {
+  const res = NextResponse.next();
+  const supabase = createMiddlewareClient({ req, res });
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
   const { pathname } = req.nextUrl;
 
-  // ① 静的アセット・APIルートは除外
-  if (pathname.startsWith("/_next") || pathname.startsWith("/api") || pathname.startsWith("/favicon.ico") || pathname.startsWith("/static")) {
-    return NextResponse.next();
+  // ログイン不要ページ（除外）
+  const publicPaths = ["/login", "/signup", "/api"];
+  const isPublic = publicPaths.some((p) => pathname.startsWith(p));
+
+  // 未ログインなら /login にリダイレクト
+  if (!session && !isPublic) {
+    const redirectUrl = new URL("/login", req.url);
+    redirectUrl.searchParams.set("redirectedFrom", pathname);
+    return NextResponse.redirect(redirectUrl);
   }
 
-  // ② 認証不要ページ（ログイン・登録）
-  if (["/login", "/signup"].includes(pathname)) {
-    return NextResponse.next();
-  }
-
-  // ③ Supabase Auth Cookie 検出（Next.js 15対応版）
-  let session = null;
-  for (const [key, cookie] of req.cookies) {
-    if (key.includes("auth-token")) {
-      session = cookie.value;
-      break;
-    }
-  }
-
-  //   if (!session) {
-  //     console.log("middleware: no session found, redirecting to /login");
-  //     const redirectUrl = new URL("/login", req.url);
-  //     redirectUrl.searchParams.set("redirectedFrom", pathname);
-  //     return NextResponse.redirect(redirectUrl);
-  //   }
-
-  return NextResponse.next();
+  return res;
 }
 
-// middleware 適用範囲
 export const config = {
-  matcher: ["/:path*", "/dashboard/:path*", "/articles/:path*", "/recommendations/:path*"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };
