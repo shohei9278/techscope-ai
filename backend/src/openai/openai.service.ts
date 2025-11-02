@@ -102,4 +102,28 @@ export class OpenAIService {
       return { skills: [] };
     }
   }
+
+  async summarizeDraft(promptText: string) {
+    try {
+      const prompt = promptText;
+
+      const res = await this.openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: 'あなたはエンジニアの学習アシスタントです。',
+          },
+          { role: 'user', content: prompt },
+        ],
+      });
+
+      const output = res.choices[0].message.content ?? '生成失敗';
+
+      return output;
+    } catch (err) {
+      this.logger.error('OpenAI summary failed', err);
+      return '生成失敗';
+    }
+  }
 }

@@ -25,4 +25,10 @@ export class DailyReportsController {
     if (!userId) throw new BadRequestException('userIdは必須です');
     return this.reportsService.findAll(userId);
   }
+
+  @Post('auto-draft')
+  async generate(@Query('userId') userId: string) {
+    const result = await this.reportsService.generateDraft(userId);
+    return result;
+  }
 }

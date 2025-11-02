@@ -126,7 +126,7 @@ export default function RecommendationsPage() {
       <div className="max-w-5xl mx-auto py-16 px-6">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-3xl font-bold">あなたへのおすすめ</h1>
-
+         
           <button
             onClick={handleRegenerate}
             disabled={refreshing || status === "generating"}
@@ -142,8 +142,7 @@ export default function RecommendationsPage() {
             {status === "generating" ? "再生成中..." : "再生成"}
           </button>
         </div>
-
-   
+         <p className="text-zinc-800 mb-4">学習履歴、登録スキル、興味に基づいて、AIが最適な記事を取得、提案します。</p>
 
         {loading ? (
           <p>AIが学習履歴を分析中です...</p>

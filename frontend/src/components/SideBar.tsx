@@ -48,9 +48,9 @@ export default function Sidebar() {
 
   const navItems = [
     { href: "/", label: "記事一覧", icon: LayoutDashboard },
-    { href: "/skills", label: "スキル登録", icon: Brain },
+    { href: "/recommendations", label: "あなたへのおすすめ", icon: Sparkles },
     { href: "/reports", label: "学習日報", icon: FileText },
-    { href: "/recommendations", label: "おすすめ", icon: Sparkles },
+    { href: "/skills", label: "スキル登録", icon: Brain },
   ];
 
 
@@ -59,7 +59,7 @@ export default function Sidebar() {
     <aside className="fixed top-0 left-0 h-screen w-64 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col">
       <div className="p-5 border-b border-zinc-200 dark:border-zinc-800">
         <h1 className="text-xl font-bold tracking-tight">
-          AI自己学習プラットフォーム
+          AI自己学習<br />プラットフォーム
         </h1>
         {userEmail && (
           <p className="text-xs text-zinc-500 mt-1 truncate">{userEmail}</p>

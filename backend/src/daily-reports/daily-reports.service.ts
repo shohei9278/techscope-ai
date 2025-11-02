@@ -96,4 +96,48 @@ ${content}
     if (error) throw new Error(error.message);
     return data;
   }
+
+  // 自動ドラフト生成
+  async generateDraft(userId: string) {
+    // 最近読んだ記事・スキル取得
+    const { data: records } = await this.supabase.client
+      .from('learning_records')
+      .select('articles(title, summary, tags)')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(5);
+
+    const { data: skills } = await this.supabase.client
+      .from('user_skills')
+      .select('skill_name, level')
+      .eq('user_id', userId)
+      .order('updated_at', { ascending: false })
+      .limit(10);
+
+    const safeRecords = records ?? [];
+    const safeSkills = skills ?? [];
+
+    const prompt = `
+あなたはエンジニアの日報アシスタントです。
+以下の学習履歴をもとに、自然な文章で日報の下書きを日本語で作成してください。
+「#」などのMarkdown記号は使わず、箇条書きではなく文章として出力してください。
+なるべくスキル名を盛り込み、学んだことが伝わるようにしてください。
+
+【最近読んだ記事】
+${safeRecords
+  .map((r: any) =>
+    Array.isArray(r.articles)
+      ? r.articles.map((a) => `・${a.title} (${a.tags?.join(', ')})`).join('\n')
+      : `・${r.articles?.title ?? 'タイトル不明'}`,
+  )
+  .join('\n')}
+
+【スキル】
+${safeSkills.map((s) => `${s.skill_name} Lv.${s.level}`).join(', ')}
+`;
+
+    const aiDraft = await this.OpenAIService.summarizeDraft(prompt);
+
+    return { content: aiDraft };
+  }
 }

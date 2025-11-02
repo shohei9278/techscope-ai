@@ -55,11 +55,25 @@ export default function LoginPage() {
     setLoading(false);
   };
 
+    const handleGuestLogin = async () => {
+    setLoading(true);
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email: "guest@example.com",
+      password: "guest1234",
+    });
+
+    if (error) alert("ゲストログインに失敗しました");
+    else router.push("/");
+
+    setLoading(false);
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-zinc-100 dark:bg-zinc-950">
       <div className="bg-white dark:bg-zinc-900 p-8 rounded-2xl shadow-md w-full max-w-md">
         <h1 className="text-2xl font-bold mb-6 text-center">
-           AI自己学習プラットフォーム ログイン
+            ログイン
         </h1>
 
         {errorMsg && (
@@ -108,6 +122,16 @@ export default function LoginPage() {
           >
             登録
           </button>
+
+          <button
+          type="button"
+          onClick={handleGuestLogin}
+          disabled={loading}
+          className="w-full py-2 mt-4 bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-white rounded hover:bg-zinc-300 dark:hover:bg-zinc-600"
+        >
+          ゲストログイン
+          </button>
+          
         </div>
       </div>
     </div>

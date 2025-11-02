@@ -26,7 +26,7 @@ export default function ArticleCard({ article }: Props) {
             {article.isRead ? "読了済み" : "未読"}
           </span>
       </div>
-      <h2 className="text-xl font-semibold mb-2">{article.title}</h2>
+      <h2 className="text-xl font-semibold mb-2 break-words">{article.title}</h2>
       <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-3">
         {article.summary}
       </p>
