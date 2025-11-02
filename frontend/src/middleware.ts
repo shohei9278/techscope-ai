@@ -23,12 +23,12 @@ export async function middleware(req: NextRequest) {
     }
   }
 
-  if (!session) {
-    console.log("middleware: no session found, redirecting to /login");
-    const redirectUrl = new URL("/login", req.url);
-    redirectUrl.searchParams.set("redirectedFrom", pathname);
-    return NextResponse.redirect(redirectUrl);
-  }
+  //   if (!session) {
+  //     console.log("middleware: no session found, redirecting to /login");
+  //     const redirectUrl = new URL("/login", req.url);
+  //     redirectUrl.searchParams.set("redirectedFrom", pathname);
+  //     return NextResponse.redirect(redirectUrl);
+  //   }
 
   return NextResponse.next();
 }
