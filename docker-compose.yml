@@ -1,0 +1,54 @@
+version: "3.9"
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+  frontend:
+    build: ./frontend
+    container_name: techscope-frontend
+    ports:
+      - "3000:3000"
+    env_file: .env
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+    command: ["yarn", "dev"]
+
+  backend:
+    build: ./backend
+    container_name: techscope-backend
+    ports:
+      - "4000:4000"
+    env_file: .env
+    depends_on:
+      - db
+    volumes:
+      - ./backend:/app
+    command: ["yarn", "start:dev"]
+
+  collector:
+    build: ./collector
+    container_name: techscope-collector
+    env_file: .env
+    depends_on:
+      - backend
+      - db
+    command: ["python", "collect_articles.py"]
+
+  db:
+    image: postgres:15
+    container_name: techscope-db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+volumes:
+  db_data:
