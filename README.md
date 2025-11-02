@@ -1,6 +1,7 @@
 # TechScope AI
 
 AI が学びを記録・分析し、自動でスキルを伸ばす「自己学習ループ」プラットフォーム
+techscope-ai.vercel.app
 
 ## コンセプト
 
