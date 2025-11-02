@@ -10,8 +10,11 @@ import { Queue } from 'bullmq';
       useFactory: () =>
         new Queue('recommendation-queue', {
           connection: {
-            host: process.env.REDIS_HOST || 'localhost',
-            port: Number(process.env.REDIS_URL) || 6379,
+            url:
+              process.env.REDIS_URL ||
+              `redis://${process.env.REDIS_HOST || 'localhost'}:${
+                process.env.REDIS_PORT || 6379
+              }`,
           },
         }),
     },
