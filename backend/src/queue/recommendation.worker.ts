@@ -24,8 +24,8 @@ async function bootstrap() {
     },
     {
       connection: {
-        host: process.env.REDIS_HOST || 'localhost',
-        port: Number(process.env.REDIS_PORT) || 6379,
+        host: process.env.REDIS_URL || 'localhost',
+        port: Number(process.env.REDIS_URL) || 6379,
       },
       removeOnComplete: { age: 3600 }, // 完了ジョブは1時間で削除
       removeOnFail: { age: 86400 }, //  失敗ジョブは1日で削除

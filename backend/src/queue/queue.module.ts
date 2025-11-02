@@ -11,7 +11,7 @@ import { Queue } from 'bullmq';
         new Queue('recommendation-queue', {
           connection: {
             host: process.env.REDIS_HOST || 'localhost',
-            port: Number(process.env.REDIS_PORT) || 6379,
+            port: Number(process.env.REDIS_URL) || 6379,
           },
         }),
     },
