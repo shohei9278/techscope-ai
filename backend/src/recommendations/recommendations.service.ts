@@ -45,19 +45,20 @@ export class RecommendationsService {
 
     try {
       // 学習履歴とスキルの取得
-      const { data: records } = await this.supabaseService.client
-        .from('learning_records')
-        .select('*, articles(title, summary, tags)')
-        .eq('user_id', userId)
-        .limit(10);
+      const [records, skills] = await Promise.all([
+        this.supabaseService.client
+          .from('learning_records')
+          .select('*, articles(title, summary, tags)')
+          .eq('user_id', userId)
+          .limit(10),
+        this.supabaseService.client
+          .from('user_skills')
+          .select('skill_name, level')
+          .eq('user_id', userId),
+      ]);
 
-      const { data: skills } = await this.supabaseService.client
-        .from('user_skills')
-        .select('skill_name, level')
-        .eq('user_id', userId);
-
-      const safeRecords = records ?? [];
-      const safeSkills = skills ?? [];
+      const safeRecords = records.data ?? [];
+      const safeSkills = skills.data ?? [];
 
       // AIにテーマ＋英語タグを生成させる
       const prompt = `
@@ -153,158 +154,193 @@ ${safeRecords
         ts: 'typescript',
       };
 
-      const allArticles: RecommendedArticle[] = [];
+      const keywords = await Promise.all(
+        items.map((i) => normalizeTagAI(i.topic)),
+      );
+      const merged = items.map((i, idx) => ({
+        topic: i.topic,
+        keyword: tagAlias[keywords[idx]] || keywords[idx],
+      }));
 
       // Qiita / Zenn から記事取得
-      for (const { topic, keyword } of items) {
-        const key = await normalizeTagAI(keyword);
-        const safeTag = tagAlias[key] || key;
-        console.log(`[${topic}] → 検索タグ: ${safeTag}`);
+      const fetchQiitaZenn = async ({
+        topic,
+        keyword,
+      }: {
+        topic: string;
+        keyword: string;
+      }) => {
+        const [qiitaRes, zennRes] = await Promise.allSettled([
+          axios.get(
+            `https://qiita.com/api/v2/tags/${keyword}/items?page=1&per_page=3`,
+          ),
+          axios.get(`https://zenn.dev/api/articles?topic=${keyword}`),
+        ]);
 
-        try {
-          // --- Qiita ---
-          let qiitaArticles: RecommendedArticle[] = [];
-          try {
-            // タグ検索
-            const tagRes = await axios.get(
-              `https://qiita.com/api/v2/tags/${encodeURIComponent(safeTag)}/items?page=1&per_page=3`,
-            );
-            qiitaArticles =
-              tagRes.data?.map((a: any) => ({
+        const qiita =
+          qiitaRes.status === 'fulfilled'
+            ? qiitaRes.value.data.map((a: any) => ({
                 title: a.title,
                 summary: a.body?.slice(0, 200) || '',
                 content: a.body || '',
                 url: a.url,
                 source: 'Qiita',
-                is_ai_recommended: true,
-                user_id: userId,
                 topic,
-              })) ?? [];
-          } catch {
-            // タグが存在しない場合はキーワード検索
-            const queryRes = await axios.get(
-              `https://qiita.com/api/v2/items?query=${encodeURIComponent(
-                safeTag,
-              )}&per_page=3`,
-            );
-            qiitaArticles =
-              queryRes.data?.map((a: any) => ({
-                title: a.title,
-                summary: a.body?.slice(0, 200) || '',
-                content: a.body || '',
-                url: a.url,
-                source: 'Qiita',
-                is_ai_recommended: true,
-                user_id: userId,
-                topic,
-              })) ?? [];
-          }
+              }))
+            : [];
 
-          // --- Zenn ---
-          let zennArticles: RecommendedArticle[] = [];
-          try {
-            const zennRes = await axios.get(
-              `https://zenn.dev/api/articles?topic=${encodeURIComponent(safeTag)}`,
-            );
-
-            zennArticles =
-              zennRes.data.articles?.slice(0, 3).map((a: any) => ({
+        const zenn =
+          zennRes.status === 'fulfilled'
+            ? zennRes.value.data.articles?.slice(0, 3).map((a: any) => ({
                 title: a.title,
-                summary: a.summary || '',
+                summary: a.summary,
                 url: `https://zenn.dev/${a.path}`,
                 source: 'Zenn',
-                is_ai_recommended: true,
-                user_id: userId,
                 topic,
-              })) ?? [];
+              }))
+            : [];
 
-            if (zennArticles.length > 0) {
-              for (const element of zennArticles) {
-                element.content = await this.fetchZennContent(element.url);
-              }
-            }
-          } catch (e) {
-            console.warn(`Zenn取得失敗: ${topic}`, e.message);
-          }
+        return [...qiita, ...zenn];
+      };
 
-          console.log(
-            `取得件数: ${qiitaArticles.length + zennArticles.length}`,
-          );
-
-          allArticles.push(...zennArticles, ...qiitaArticles);
-        } catch (e) {
-          console.warn(`記事取得失敗: ${topic}`, e.message);
-        }
-      }
+      const allArticles = (
+        await Promise.all(merged.map(fetchQiitaZenn))
+      ).flat();
 
       // 学習済み記事の除外
-      const { data: completedIds } = await this.supabaseService.client
+      const completed = await this.supabaseService.client
         .from('learning_records')
         .select('article_id')
         .eq('user_id', userId);
-      const safeCompletedIds = completedIds ?? [];
-      const excludeIds = safeCompletedIds.map((r) => r.article_id);
-      const filtered = allArticles.filter((a) => !excludeIds.includes(a.id));
 
-      // Supabase に保存
-      if (filtered.length > 0) {
-        // 過去のおすすめ記事を削除
-        await this.supabaseService.client
-          .from('recommended_articles')
-          .delete()
-          .eq('user_id', userId);
+      const excludeIds = new Set(completed.data?.map((r) => r.article_id));
+      const filtered = allArticles.filter((a) => !excludeIds.has(a.id));
+      console.log(allArticles);
+      console.log(filtered);
 
-        for (const a of filtered) {
-          // マスターデータベースの存在チェック
-          const { data: existing } = await this.supabaseService.client
-            .from('articles')
-            .select('id')
-            .eq('url', a.url)
-            .maybeSingle();
+      if (!filtered.length) throw new Error('No new articles');
 
-          let articleId = existing?.id;
+      const urls = filtered.map((a) => a.url);
+      const { data: existingArticles } = await this.supabaseService.client
+        .from('articles')
+        .select('id, url')
+        .in('url', urls);
 
-          // AI要約
-          const { summary, tags } = await this.openAIService.summarizeArticle(
-            a.title,
-            a.content,
-          );
+      const safeExistingArticles = existingArticles ?? [];
+      const idMap = Object.fromEntries(
+        safeExistingArticles.map((a) => [a.url, a.id]),
+      );
 
-          // なければ登録
-          if (!articleId) {
-            const { data: inserted } = await this.supabaseService.client
-              .from('articles')
-              .insert({
-                summary: summary || a.summary,
-                content: a.content,
-                tags: tags,
-                title: a.title,
-                url: a.url,
-                source: a.source,
-              })
-              .select('id')
-              .single();
+      const newArticles = filtered.filter((a) => !idMap[a.url]);
 
-            // 作成時のID
-            articleId = inserted?.id;
-          }
+      const { data: inserted } = await this.supabaseService.client
+        .from('articles')
+        .insert(
+          newArticles.map((a) => ({
+            title: a.title,
+            url: a.url,
+            summary: a.summary,
+            source: a.source,
+            tags: [],
+            content: a.content,
+          })),
+        )
+        .select('id, url');
+      const safeInserted = inserted ?? [];
+      for (const art of safeInserted) idMap[art.url] = art.id;
 
-          // おすすめデータベースに保存
-          await this.supabaseService.client
-            .from('recommended_articles')
-            .insert({
-              user_id: userId,
-              summary: summary || a.summary,
-              content: a.content,
-              tags: tags,
-              title: a.title,
-              url: a.url,
-              source: a.source,
-              topic: a.topic,
-              article_id: articleId,
-            });
-        }
-      }
+      const recommendInserts = await Promise.all(
+        filtered.map(async (a) => {
+          const articleId = idMap[a.url];
+          // summary / tags が newArticles にあった場合は再利用
+          const matched: any = safeInserted.find((s) => s.url === a.url);
+          const summary = matched?.summary || a.summary;
+          const tags = matched?.tags || [];
+
+          return {
+            user_id: userId,
+            article_id: articleId,
+            title: a.title,
+            summary,
+            tags,
+            url: a.url,
+            source: a.source,
+            topic: a.topic,
+          };
+        }),
+      );
+
+      // 過去のおすすめ記事を削除 → 一括登録
+      await this.supabaseService.client
+        .from('recommended_articles')
+        .delete()
+        .eq('user_id', userId);
+
+      const { error: recError } = await this.supabaseService.client
+        .from('recommended_articles')
+        .insert(recommendInserts);
+
+      if (recError) throw new Error(recError.message);
+
+      // // Supabase に保存
+      // if (filtered.length > 0) {
+      //   // 過去のおすすめ記事を削除
+      //   await this.supabaseService.client
+      //     .from('recommended_articles')
+      //     .delete()
+      //     .eq('user_id', userId);
+
+      //   for (const a of filtered) {
+      //     // マスターデータベースの存在チェック
+      //     const { data: existing } = await this.supabaseService.client
+      //       .from('articles')
+      //       .select('id')
+      //       .eq('url', a.url)
+      //       .maybeSingle();
+
+      //     let articleId = existing?.id;
+
+      //     // AI要約
+      //     const { summary, tags } = await this.openAIService.summarizeArticle(
+      //       a.title,
+      //       a.content,
+      //     );
+
+      //     // なければ登録
+      //     if (!articleId) {
+      //       const { data: inserted } = await this.supabaseService.client
+      //         .from('articles')
+      //         .insert({
+      //           summary: summary || a.summary,
+      //           content: a.content,
+      //           tags: tags,
+      //           title: a.title,
+      //           url: a.url,
+      //           source: a.source,
+      //         })
+      //         .select('id')
+      //         .single();
+
+      //       // 作成時のID
+      //       articleId = inserted?.id;
+      //     }
+
+      //     // おすすめデータベースに保存
+      //     await this.supabaseService.client
+      //       .from('recommended_articles')
+      //       .insert({
+      //         user_id: userId,
+      //         summary: summary || a.summary,
+      //         content: a.content,
+      //         tags: tags,
+      //         title: a.title,
+      //         url: a.url,
+      //         source: a.source,
+      //         topic: a.topic,
+      //         article_id: articleId,
+      //       });
+      //   }
+      // }
 
       await this.supabaseService.client
         .from('recommendation_status')

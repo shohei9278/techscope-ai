@@ -55,11 +55,12 @@ ${content}
 
       if (existing) {
         // 既にある → レベル+1
+
         await this.supabase.client
           .from('user_skills')
           .update({
             level: existing.level + 1,
-            updated_at: new Date().toISOString(),
+            created_at: new Date().toISOString(),
           })
           .eq('id', existing.id);
       } else {
@@ -111,7 +112,7 @@ ${content}
       .from('user_skills')
       .select('skill_name, level')
       .eq('user_id', userId)
-      .order('updated_at', { ascending: false })
+      .order('created_at', { ascending: false })
       .limit(10);
 
     const safeRecords = records ?? [];

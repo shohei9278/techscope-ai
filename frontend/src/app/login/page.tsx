@@ -2,10 +2,9 @@
 
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { createPagesBrowserClient } from "@supabase/auth-helpers-nextjs";
+import { supabase } from "@/lib/supabaseClient";
 
 function LoginForm() {
-  const supabase = createPagesBrowserClient();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -14,7 +13,6 @@ function LoginForm() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  // redirectedFrom が存在すればそちらへ
   const redirectTo = searchParams.get("redirectedFrom") ?? "/";
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -102,7 +100,6 @@ function LoginForm() {
   );
 }
 
-// Suspenseでラップ
 export default function LoginPage() {
   return (
     <Suspense fallback={<div className="p-8 text-center">読み込み中...</div>}>

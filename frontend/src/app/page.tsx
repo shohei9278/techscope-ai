@@ -98,7 +98,7 @@ export default function Page() {
       <div className="max-w-5xl mx-auto py-16 px-6">
         <h1 className="text-3xl font-bold mb-6">記事一覧</h1>
 
-        <p>同期したい記事のキーワードを入力してください</p>
+        <p>同期したい記事のキーワードを入力してください。未入力の場合は最新記事を同期します。</p>
 
         {/*  検索ボックス */}
         <div className="flex items-center mb-8">

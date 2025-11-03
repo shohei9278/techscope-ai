@@ -4,6 +4,7 @@ import { api } from "@/lib/api";
 import ArticleCard from "@/components/ArticleCard";
 import { RefreshCw } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
+import { log } from "node:console";
 
 type RecommendationItem = {
   topic: string;
@@ -21,6 +22,7 @@ type Article = {
   tags: string[];
   created_at: string;
   date: string;
+  isRead?: boolean;
 };
 
 export default function RecommendationsPage() {
@@ -32,27 +34,37 @@ export default function RecommendationsPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [status, setStatus] = useState<"ready" | "generating" | "error">("ready");
   const [message, setMessage] = useState<string>("");
+  const [learningRecords, setLearningRecords] = useState<any[]>([]);
+
+  const fetchLearning = async (uid: string) => {
+    const { data } = await api.get("/learning", { params: { userId: uid } });
+    setLearningRecords(data);
+    return data;
+  };
 
   /**  おすすめ記事を取得 */
   const fetchRecommendations = async (uid: string) => {
     setLoading(true);
     try {
+      const learningData = await fetchLearning(uid);
       const articleRes = await api.get("/recommendations/articles", {
         params: { userId: uid },
       });
-      const articleData = articleRes.data || [];
-      setArticles(articleData);
+
+      const articlesWithStatus = articleRes.data.map((article: Article) => {
+        const hasRead = learningData.some((r: any) => r.article_id === article.article_id);
+        return { ...article, isRead: hasRead };
+      });
+
+      setArticles(articlesWithStatus);
 
       // トピックごとにグループ化
-      const groupedByTopic = articleData.reduce(
-        (acc: Record<string, Article[]>, cur: Article) => {
-          const topic = cur.topic || "その他";
-          if (!acc[topic]) acc[topic] = [];
-          acc[topic].push(cur);
-          return acc;
-        },
-        {}
-      );
+      const groupedByTopic = articlesWithStatus.reduce((acc: Record<string, Article[]>, cur: Article) => {
+        const topic = cur.topic || "その他";
+        if (!acc[topic]) acc[topic] = [];
+        acc[topic].push(cur);
+        return acc;
+      }, {});
       setGrouped(groupedByTopic);
     } catch (error) {
       console.error("Error fetching recommendations:", error);
@@ -84,7 +96,7 @@ export default function RecommendationsPage() {
       setMessage("再生成に失敗しました。");
     } finally {
       setRefreshing(false);
-      setStatus("ready")
+      setStatus("ready");
     }
   };
 
@@ -97,6 +109,7 @@ export default function RecommendationsPage() {
       setUserId(user.id);
 
       await fetchStatus(user.id);
+
       await fetchRecommendations(user.id);
     };
     init();
@@ -106,43 +119,51 @@ export default function RecommendationsPage() {
   useEffect(() => {
     if (!userId) return;
 
-    const interval = setInterval(async () => {
-      await fetchStatus(userId);
+    let isActive = true; // コンポーネントがアンマウントされたら停止するためのフラグ
 
-      if (status === "ready") {
-        await fetchRecommendations(userId);
-        clearInterval(interval);
-        setMessage("新しいおすすめが反映されました！");
-      } else if (status === "generating") {
-        setMessage("AIがおすすめを更新中です...");
+    const pollStatus = async () => {
+      while (isActive) {
+        const res = await api.get("/recommendations/status", {
+          params: { userId },
+        });
+
+        const current = res.data.status;
+        setStatus(current);
+
+        if (current === "generating") {
+          setMessage("AIがおすすめを更新中です...");
+        }
+
+        if (current === "ready") {
+          await fetchRecommendations(userId);
+          setMessage("新しいおすすめが反映されました！");
+          break; // 🔸 readyになったら即終了
+        }
+
+        //  5秒待機
+        await new Promise((r) => setTimeout(r, 5000));
       }
-    }, 5000);
+    };
 
-    return () => clearInterval(interval);
-  }, [userId, status]);
+    pollStatus();
+
+    return () => {
+      isActive = false; // コンポーネントアンマウント時に停止
+    };
+  }, [userId]);
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-black text-zinc-900 dark:text-zinc-50">
       <div className="max-w-5xl mx-auto py-16 px-6">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-3xl font-bold">あなたへのおすすめ</h1>
-         
-          <button
-            onClick={handleRegenerate}
-            disabled={refreshing || status === "generating"}
-            className={`flex items-center gap-2 px-4 py-2 rounded-full border text-sm font-medium transition ${
-              refreshing || status === "generating"
-                ? "opacity-60 cursor-not-allowed"
-                : "hover:bg-zinc-200 dark:hover:bg-zinc-800"
-            }`}
-          >
-            <RefreshCw
-              className={`w-4 h-4 ${refreshing || status === "generating" ? "animate-spin" : ""}`}
-            />
+
+          <button onClick={handleRegenerate} disabled={refreshing || status === "generating"} className={`flex items-center gap-2 px-4 py-2 rounded-full border text-sm font-medium transition ${refreshing || status === "generating" ? "opacity-60 cursor-not-allowed" : "hover:bg-zinc-200 dark:hover:bg-zinc-800"}`}>
+            <RefreshCw className={`w-4 h-4 ${refreshing || status === "generating" ? "animate-spin" : ""}`} />
             {status === "generating" ? "再生成中..." : "再生成"}
           </button>
         </div>
-         <p className="text-zinc-800 mb-4">学習履歴、登録スキル、興味に基づいて、AIが最適な記事を取得、提案します。</p>
+        <p className="text-zinc-800 mb-4">学習履歴、登録スキル、興味に基づいて、AIが最適な記事を取得、提案します。</p>
 
         {loading ? (
           <p>AIが学習履歴を分析中です...</p>
