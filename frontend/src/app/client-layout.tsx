@@ -11,7 +11,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   return (
     <div className="flex min-h-screen bg-zinc-50 dark:bg-black">
       {!shouldHideSidebar && <Sidebar />}
-      <main className="flex-1">{children}</main>
+      <main className="flex-1  ml-64 p-6 overflow-y-auto">{children}</main>
     </div>
   );
 }
