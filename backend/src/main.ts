@@ -10,8 +10,7 @@ async function bootstrap() {
     const requiredEnvVars = [
       'SUPABASE_URL',
       'SUPABASE_SERVICE_KEY',
-      'OPENAI_API_KEY',
-      'DATABASE_URL'
+      'OPENAI_API_KEY'
     ];
 
     const missingVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
