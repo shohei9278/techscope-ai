@@ -39,10 +39,12 @@ export default function Sidebar() {
   };
 
   const navItems = [
-    { href: "/", label: "記事一覧", icon: LayoutDashboard },
-    { href: "/recommendations", label: "あなたへのおすすめ", icon: Sparkles },
+    { href: "/dashboard", label: "学習ホーム", icon: LayoutDashboard },
+    { href: "/review", label: "復習", icon: Brain },
+    { href: "/", label: "学習コンテンツ", icon: LayoutDashboard },
+    { href: "/recommendations", label: "次に学ぶ", icon: Sparkles },
     { href: "/reports", label: "学習日報", icon: FileText },
-    { href: "/skills", label: "スキル登録", icon: Brain },
+    { href: "/skills", label: "スキル管理", icon: Brain },
   ];
 
   return (

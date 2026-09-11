@@ -1,41 +1,9 @@
-version: "3.9"
 services:
   redis:
     image: redis:7-alpine
+    container_name: techscope-redis
     ports:
       - "6379:6379"
-  frontend:
-    build: ./frontend
-    container_name: techscope-frontend
-    ports:
-      - "3000:3000"
-    env_file: .env
-    depends_on:
-      - backend
-    volumes:
-      - ./frontend:/app
-    command: ["yarn", "dev"]
-
-  backend:
-    build: ./backend
-    container_name: techscope-backend
-    ports:
-      - "4000:4000"
-    env_file: .env
-    depends_on:
-      - db
-    volumes:
-      - ./backend:/app
-    command: ["yarn", "start:dev"]
-
-  collector:
-    build: ./collector
-    container_name: techscope-collector
-    env_file: .env
-    depends_on:
-      - backend
-      - db
-    command: ["python", "collect_articles.py"]
 
   db:
     image: postgres:15
@@ -50,5 +18,63 @@ services:
     volumes:
       - db_data:/var/lib/postgresql/data
 
+  backend:
+    build: ./backend
+    container_name: techscope-backend
+    ports:
+      - "4000:4000"
+    env_file: .env
+    depends_on:
+      - db
+      - redis
+    environment:
+      REDIS_HOST: redis # ← 重要
+      REDIS_PORT: 6379
+    volumes:
+      - ./backend:/app
+      - backend_node_modules:/app/node_modules
+    command: sh -c "yarn build && yarn start:prod"
+
+  worker:
+    build: ./backend
+    container_name: techscope-worker
+    env_file: .env
+    depends_on:
+      - backend
+      - redis
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    volumes:
+      - ./backend:/app
+      - backend_node_modules:/app/node_modules
+    command: sh -c "yarn build && node dist/queue/recommendation.worker.js"
+
+  frontend:
+    build: ./frontend
+    container_name: techscope-frontend
+    ports:
+      - "3000:3000"
+    env_file: .env
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+      - frontend_next:/app/.next
+    command: [ "yarn", "dev" ]
+
+  collector:
+    build: ./collector
+    container_name: techscope-collector
+    env_file: .env
+    depends_on:
+      - backend
+      - db
+    command: [ "sleep", "infinity" ]
+
 volumes:
   db_data:
+  backend_node_modules:
+  frontend_node_modules:
+  frontend_next:

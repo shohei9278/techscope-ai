@@ -82,6 +82,11 @@ ${content}
           removeOnFail: { age: 86400 }, // 1日後に失敗ジョブも削除
         },
       );
+      await this.recommendationQueue.add(
+        'sync-resources',
+        { userId },
+        { jobId: `sync-resources-${userId}`, removeOnComplete: { age: 3600 }, removeOnFail: { age: 86400 } },
+      );
     }
 
     return { ...report, extracted_skills: skills };
@@ -103,7 +108,7 @@ ${content}
     // 最近読んだ記事・スキル取得
     const { data: records } = await this.supabase.client
       .from('learning_records')
-      .select('articles(title, summary, tags)')
+      .select('articles(title, summary, tags), memo, comprehension_level, practical_task_done')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(5);
@@ -129,7 +134,7 @@ ${safeRecords
   .map((r: any) =>
     Array.isArray(r.articles)
       ? r.articles.map((a) => `・${a.title} (${a.tags?.join(', ')})`).join('\n')
-      : `・${r.articles?.title ?? 'タイトル不明'}`,
+      : `・${r.articles?.title ?? 'タイトル不明'} (理解度: ${r.comprehension_level ?? '-'} / 5, メモ: ${r.memo ?? 'なし'}, 実践: ${r.practical_task_done ? '完了' : '未完了'})`,
   )
   .join('\n')}
 

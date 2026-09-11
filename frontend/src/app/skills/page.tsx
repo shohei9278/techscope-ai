@@ -75,9 +75,12 @@ export default function SkillsPage() {
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-black text-zinc-900 dark:text-zinc-50">
       <div className="max-w-3xl mx-auto py-16 px-6">
-        <h1 className="text-3xl font-bold mb-6">スキル登録</h1>
+        <h1 className="text-3xl font-bold mb-2">スキル管理</h1>
+        <p className="text-zinc-600 dark:text-zinc-300 mb-8">日報や学習記録からAIが自動でスキルを更新します。内容が違う場合だけ、ここで修正してください。</p>
 
-        <div className="flex gap-3 mb-8">
+        <details className="mb-8">
+          <summary className="cursor-pointer text-sm text-zinc-500 hover:text-blue-600">スキルを手動で追加する</summary>
+          <div className="flex gap-3 mt-3">
           <input
             type="text"
             value={newSkill}
@@ -102,7 +105,8 @@ export default function SkillsPage() {
           >
             追加
           </button>
-        </div>
+          </div>
+        </details>
 
         <ul className="space-y-3">
           {skills.map((s) => (

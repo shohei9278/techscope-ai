@@ -71,7 +71,7 @@ export default function ReportsPage() {
       <div className="max-w-3xl mx-auto py-16 px-6">
         <h1 className="text-3xl font-bold mb-6">学習日報</h1>
         <p className="text-zinc-800 mb-4">
-          学習日報を投稿する事で、AIがあなたのスキルを分析し自動でスキル登録を行います。<br></br>またおすすめ記事が更新されます。
+          学習日報を投稿すると、AIが学習内容からスキルを更新し、次に学ぶコンテンツを調整します。
         </p>
         {/* --- 日報入力フォーム --- */}
         <button onClick={submitReportDraft} disabled={loading} className={`mb-4 px-4 py-2 rounded-lg text-white ${loading ? "bg-gray-500" : "bg-purple-600 hover:bg-purple-700"}`}>

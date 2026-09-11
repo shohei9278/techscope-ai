@@ -16,7 +16,11 @@ async function bootstrap() {
       console.log(`[Worker] Recommendation job started for user: ${userId}`);
 
       try {
-        await recommendationsService.getRecommendations(userId);
+        if (job.name === 'sync-resources') {
+          await recommendationsService.syncResourcesForUser(userId);
+        } else {
+          await recommendationsService.getRecommendations(userId);
+        }
         console.log(`[Worker] Recommendation completed for ${userId}`);
       } catch (err) {
         console.error(`[Worker] Job failed for ${userId}`, err);

@@ -1,4 +1,4 @@
-FROM --platform=linux/amd64 node:20-slim
+FROM node:20-alpine
 WORKDIR /app
 
 # Yarn導入

@@ -36,6 +36,88 @@ export class RecommendationsService {
     return $('.znc').text().trim();
   }
 
+  async syncLearningResources(keyword = 'Python') {
+    const resources: Array<Record<string, any>> = [];
+    const errors: string[] = [];
+    const add = (resource: Record<string, any>) => {
+      if (resource.title && resource.url) resources.push({ ...resource, topic: keyword });
+    };
+
+    const cacheSince = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { data: cached } = await this.supabaseService.client
+      .from('learning_resources')
+      .select('resource_type')
+      .eq('topic', keyword)
+      .gte('created_at', cacheSince);
+    if (cached?.length) {
+      const byType = cached.reduce<Record<string, number>>((result, item) => {
+        result[item.resource_type] = (result[item.resource_type] ?? 0) + 1;
+        return result;
+      }, {});
+      return { count: cached.length, byType, cached: true, errors: [] };
+    }
+
+    try {
+      if (process.env.YOUTUBE_API_KEY) {
+        const youtube = await axios.get('https://www.googleapis.com/youtube/v3/search', { params: { part: 'snippet', q: `${keyword} programming tutorial`, maxResults: 5, type: 'video', key: process.env.YOUTUBE_API_KEY }, timeout: 15000 });
+        for (const item of youtube.data.items ?? []) add({ resource_type: 'video', external_id: item.id.videoId, title: item.snippet.title, summary: item.snippet.description, url: `https://www.youtube.com/watch?v=${item.id.videoId}`, thumbnail_url: item.snippet.thumbnails?.high?.url ?? item.snippet.thumbnails?.default?.url, source: 'YouTube' });
+      }
+    } catch (error) { errors.push(`YouTube: ${error instanceof Error ? error.message : 'request failed'}`); }
+    try {
+      const books = await axios.get('https://www.googleapis.com/books/v1/volumes', { params: { q: keyword, maxResults: 5 }, timeout: 15000 });
+      for (const item of books.data.items ?? []) { const info = item.volumeInfo ?? {}; add({ resource_type: 'book', external_id: item.id, title: info.title, summary: info.description ?? '', url: info.infoLink, thumbnail_url: info.imageLinks?.thumbnail, source: 'Google Books' }); }
+    } catch (error) {
+      try {
+        const books = await axios.get('https://openlibrary.org/search.json', { params: { q: keyword, limit: 5 }, timeout: 15000 });
+        for (const item of books.data.docs ?? []) {
+          const key = String(item.key ?? '').replace('/works/', '');
+          add({ resource_type: 'book', external_id: key, title: item.title, summary: `${item.author_name?.join(', ') ?? '著者不明'}${item.first_publish_year ? ` · ${item.first_publish_year}年` : ''}`, url: `https://openlibrary.org${item.key}`, thumbnail_url: item.cover_i ? `https://covers.openlibrary.org/b/id/${item.cover_i}-M.jpg` : null, source: 'Open Library' });
+        }
+      } catch (fallbackError) { errors.push(`Books: ${fallbackError instanceof Error ? fallbackError.message : 'request failed'}`); }
+    }
+    try {
+      const github = await axios.get('https://api.github.com/search/repositories', { params: { q: `${keyword} tutorial`, per_page: 5, sort: 'stars' }, headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'TechScope-AI' }, timeout: 15000 });
+      for (const item of github.data.items ?? []) add({ resource_type: 'repository', external_id: item.full_name, title: item.full_name, summary: item.description ?? '', url: item.html_url, thumbnail_url: item.owner?.avatar_url, source: 'GitHub', metadata: { stars: item.stargazers_count, language: item.language } });
+    } catch (error) { errors.push(`GitHub: ${error instanceof Error ? error.message : 'request failed'}`); }
+    try {
+      const response = await axios.get('https://www.freecodecamp.org/news/rss/', { timeout: 15000, headers: { 'User-Agent': 'TechScope-AI' } });
+      const itemMatches = String(response.data).match(/<item>[\s\S]*?<\/item>/g) ?? [];
+      for (const item of itemMatches.slice(0, 5)) {
+        const read = (tag: string) => item.match(new RegExp(`<${tag}><!\\[CDATA\\[([\\s\\S]*?)\\]\\]></${tag}>|<${tag}>([\\s\\S]*?)</${tag}>`))?.slice(1).find(Boolean)?.trim() ?? '';
+        const title = read('title');
+        const url = read('link');
+        add({ resource_type: 'course', external_id: url, title, summary: read('description').replace(/<[^>]+>/g, '').slice(0, 2000), url, source: 'FreeCodeCamp' });
+      }
+    } catch (error) { errors.push(`Courses: ${error instanceof Error ? error.message : 'request failed'}`); }
+
+    if (!resources.length) return { count: 0, byType: {}, errors };
+    const rows = resources.map(({ resource_type, external_id, title, summary, url, thumbnail_url, source, topic, metadata }) => ({ resource_type, external_id: String(external_id), title: String(title).slice(0, 500), summary: String(summary ?? '').slice(0, 2000), url, thumbnail_url: thumbnail_url ?? null, source, topic, metadata: metadata ?? {} }));
+    const { data, error } = await this.supabaseService.client.from('learning_resources').upsert(rows, { onConflict: 'resource_type,external_id' }).select('id');
+    if (error) return { count: 0, byType: {}, errors: [...errors, `Database: ${error.message}`] };
+    const byType = rows.reduce<Record<string, number>>((result, row) => {
+      result[row.resource_type] = (result[row.resource_type] ?? 0) + 1;
+      return result;
+    }, {});
+    return { count: data?.length ?? rows.length, byType, cached: false, errors };
+  }
+
+  async generateRoadmap(skills: string, recentLearning: string) {
+    return this.openAIService.generateLearningRoadmap(skills || 'まだ登録なし', recentLearning || 'まだ学習履歴なし');
+  }
+
+  async syncResourcesForUser(userId: string) {
+    const { data: skills } = await this.supabaseService.client
+      .from('user_skills')
+      .select('skill_name')
+      .eq('user_id', userId)
+      .order('level', { ascending: false })
+      .limit(3);
+    const keywords = (skills ?? []).map((skill) => skill.skill_name).filter(Boolean);
+    if (!keywords.length) keywords.push('programming');
+    const results = await Promise.all(keywords.map((keyword) => this.syncLearningResources(keyword)));
+    return { count: results.reduce((sum, result) => sum + result.count, 0), results };
+  }
+
   async getRecommendations(userId: string) {
     await this.supabaseService.client.from('recommendation_status').upsert({
       user_id: userId,
@@ -64,6 +146,8 @@ export class RecommendationsService {
       const prompt = `
 あなたは学習コンシェルジュです。
 以下のスキルと最近読んだ記事を分析し、次に学ぶべきテーマを3つ提案してください。
+理解度が3以下の記事のタグやテーマは、復習・補強につながる候補として優先してください。
+理解度が4以上のテーマは、応用・発展的な候補にしてください。
 
 
 また、それぞれのテーマに対応する**英語の検索用タグ(keyword)**も1つ生成してください。
@@ -76,7 +160,7 @@ ${safeSkills.map((s) => `${s.skill_name}(Lv.${s.level})`).join(', ')}
 ${safeRecords
   .map(
     (r) =>
-      `タイトル: ${r.articles?.title}, タグ: ${r.articles?.tags?.join(', ')}`,
+      `タイトル: ${r.articles?.title}, タグ: ${r.articles?.tags?.join(', ')}, 理解度: ${r.comprehension_level ?? '-'} / 5`,
   )
   .join('\n')}
 
@@ -207,16 +291,15 @@ ${safeRecords
         await Promise.all(merged.map(fetchQiitaZenn))
       ).flat();
 
-      // 学習済み記事の除外
-      const completed = await this.supabaseService.client
-        .from('learning_records')
-        .select('article_id')
-        .eq('user_id', userId);
-
-      const excludeIds = new Set(completed.data?.map((r) => r.article_id));
-      const filtered = allArticles.filter((a) => !excludeIds.has(a.id));
-      console.log(allArticles);
-      console.log(filtered);
+      // 外部サービスのIDではなく、内部記事のURLを介して学習済み記事を除外する
+      const candidateUrls = [...new Set(allArticles.map((article) => article.url).filter(Boolean))];
+      const [{ data: existingForFilter }, { data: completed }] = await Promise.all([
+        this.supabaseService.client.from('articles').select('id, url').in('url', candidateUrls),
+        this.supabaseService.client.from('learning_records').select('article_id').eq('user_id', userId),
+      ]);
+      const completedIds = new Set((completed ?? []).map((record) => record.article_id));
+      const readUrls = new Set((existingForFilter ?? []).filter((article) => completedIds.has(article.id)).map((article) => article.url));
+      const filtered = allArticles.filter((article) => !readUrls.has(article.url));
 
       if (!filtered.length) throw new Error('No new articles');
 
