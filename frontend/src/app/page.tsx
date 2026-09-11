@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import ArticleCard from "@/components/ArticleCard";
 import ResourceCard from "@/components/ResourceCard";
@@ -45,13 +44,12 @@ const learningModes: { value: LearningMode; label: string }[] = [
 ];
 
 export default function Page() {
-  const searchParams = useSearchParams();
   const [articles, setArticles] = useState<Article[]>([]);
   const [resources, setResources] = useState<Resource[]>([]);
   const [learningRecords, setLearningRecords] = useState<any[]>([]);
   const [availableTags, setAvailableTags] = useState<string[]>([]); // ← 追加
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState<string>(() => searchParams.get("q") ?? "");
+  const [searchQuery, setSearchQuery] = useState<string>("");
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -107,6 +105,7 @@ export default function Page() {
   };
 
   useEffect(() => {
+    setSearchQuery(new URLSearchParams(window.location.search).get("q") ?? "");
     fetchUserAndData();
   }, []);
 
